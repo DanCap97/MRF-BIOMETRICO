@@ -54,9 +54,12 @@ class Config:
 
 SLOTS = ("entrada_manana", "salida_manana", "entrada_tarde", "salida_tarde")
 
+DIAS_SEMANA = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+
 ENCABEZADOS = {
     "codigo": "Codigo",
     "fecha": "Fecha",
+    "dia": "Día",
     "entrada_manana": "Entrada Mañana",
     "salida_manana": "Salida Mañana",
     "entrada_tarde": "Entrada Tarde",
@@ -69,7 +72,7 @@ ENCABEZADOS = {
     "observaciones": "Observaciones",
 }
 COLUMNAS_BASICAS = ["codigo", "fecha"] + list(SLOTS)
-COLUMNAS_COMPLETAS = COLUMNAS_BASICAS + [
+COLUMNAS_COMPLETAS = ["codigo", "fecha", "dia"] + list(SLOTS) + [
     "nombre",
     "departamento",
     "mes",
@@ -382,6 +385,7 @@ def clasificar(dia: DiaCrudo, perfil: dict, cfg: Config) -> dict:
     return {
         "codigo": dia.codigo,
         "fecha": dia.fecha,
+        "dia": DIAS_SEMANA[dia.fecha.weekday()],
         **slots,
         "nombre": dia.nombre,
         "departamento": dia.departamento,
@@ -469,7 +473,7 @@ def construir_excel(filas: list[dict], columnas: list[str]) -> Workbook:
                 elif clave in SLOTS:
                     celda.number_format = "HH:MM:SS"
         anchos = {
-            "codigo": 8, "fecha": 11, "nombre": 34, "departamento": 13,
+            "codigo": 8, "fecha": 11, "dia": 13, "nombre": 34, "departamento": 13,
             "mes": 10, "archivo": 24, "marcas": 10, "observaciones": 52,
         }
         for j, clave in enumerate(columnas, start=1):

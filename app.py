@@ -22,7 +22,7 @@ def leer_reportes(archivos):
 
 
 def tabla(filas):
-    columnas=['codigo','nombre','fecha',*SLOTS,'observaciones']
+    columnas=['codigo','nombre','fecha','dia',*SLOTS,'observaciones']
     salida=[]
     for f in filas:
         row={}
