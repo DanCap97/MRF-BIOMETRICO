@@ -8,6 +8,12 @@ from reglas import REGLAS, aplicar_reglas
 from biometrico_normalizar import (Config, procesar, SLOTS, ENCABEZADOS, COLUMNAS_COMPLETAS,
                                    excel_en_bytes, csv_en_texto, minutos_trabajados)
 
+# Compatibilidad con reportes cacheados y motores anteriores sin el campo Día.
+DIAS_SEMANA = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
+ENCABEZADOS['dia'] = 'Día'
+COLUMNAS_COMPLETAS = [c for c in COLUMNAS_COMPLETAS if c != 'dia']
+COLUMNAS_COMPLETAS.insert(COLUMNAS_COMPLETAS.index('fecha') + 1, 'dia')
+
 st.set_page_config(page_title='MRF · Asistencia', page_icon='🕘', layout='wide')
 st.markdown('''<style>
 .block-container {max-width:1250px;padding-top:2rem}
@@ -27,7 +33,7 @@ def tabla(filas):
     for f in filas:
         row={}
         for c in columnas:
-            v=f[c]
+            v=DIAS_SEMANA[f['fecha'].weekday()] if c == 'dia' else f[c]
             if c=='fecha': v=v.strftime('%d/%m/%Y')
             elif c in SLOTS: v=v.strftime('%H:%M') if v else '—'
             row[ENCABEZADOS[c]]=v
@@ -63,7 +69,9 @@ except Exception:
 if not crudas:
     st.warning('No se encontraron días en el archivo.'); st.stop()
 actuales={f['codigo']:f['nombre'] for f in crudas}
-filas=aplicar_reglas(crudas, REGLAS)
+# Se recalcula después de leer la caché, sin modificar sus filas originales.
+filas=[{**f, 'dia': DIAS_SEMANA[f['fecha'].weekday()]}
+       for f in aplicar_reglas(crudas, REGLAS)]
 st.subheader('2. Revisa la asistencia')
 a,b,c=st.columns([2,2,1])
 elegidos=a.multiselect('Colaboradores',list(actuales),format_func=lambda c:actuales[c],placeholder='Todo el equipo')
