@@ -57,7 +57,7 @@ with st.container(border=True):
     subidos=st.file_uploader('Archivos del biométrico',type=['xlsx'],accept_multiple_files=True)
     st.caption('Formato del modelo HORARIO.xlsx · Puedes cargar varios meses.')
 with st.expander('Reglas aplicadas automáticamente'):
-    st.markdown('• Todos: sábado y domingo → Festivo.\n\n• Guido y Ruby: también lunes, miércoles y viernes.\n\n• David: también viernes.\n\n• Víctor Hugo Vélez (código 6): salida de mañana 12:00 y entrada de tarde 14:00 cuando las marcaciones abarcan ambos turnos.')
+    st.markdown('• Todos: sábado y domingo sin marcaciones → Festivo. Si hay marcaciones, se respetan.\n\n• Guido y Ruby: también lunes, miércoles y viernes sin marcaciones.\n\n• David: también viernes sin marcaciones.\n\n• Víctor Hugo Vélez (código 6): de lunes a viernes, completar salida de mañana 12:00 y entrada de tarde 14:00 solo si faltan y las marcaciones abarcan ambos turnos. Sábados y domingos se respetan las horas registradas.')
 if not subidos:
     st.info('Carga un reporte para comenzar. Las reglas se aplican automáticamente.')
     st.stop()

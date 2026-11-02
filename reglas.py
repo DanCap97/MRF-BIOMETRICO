@@ -49,16 +49,25 @@ def aplicar_reglas(filas, reglas=None):
         f = original.copy()
         r = reglas.get(f['codigo'], regla_vacia())
         obs = [o for o in f['observaciones'].split('; ') if o]
-        if f['fecha'].weekday() in r['festivos']:
+        hay_marcas = bool(f.get('marcas')) or any(f.get(c) is not None for c in
+            ('entrada_manana', 'salida_manana', 'entrada_tarde', 'salida_tarde'))
+        if f['fecha'].weekday() in r['festivos'] and not hay_marcas:
             obs = ['Festivo'] + [o for o in obs if o not in ('sin marcaciones', 'Festivo')]
-        if r['almuerzo'] and f['entrada_manana'] and f['salida_tarde']:
-            salida = dt.time.fromisoformat(r['salida'])
-            entrada = dt.time.fromisoformat(r['entrada'])
+        if (r['almuerzo'] and f['fecha'].weekday() < 5
+                and f['entrada_manana'] and f['salida_tarde']
+                and (f['salida_manana'] is None or f['entrada_tarde'] is None)):
+            salida = f['salida_manana'] or dt.time.fromisoformat(r['salida'])
+            entrada = f['entrada_tarde'] or dt.time.fromisoformat(r['entrada'])
             if f['entrada_manana'] <= salida < entrada <= f['salida_tarde']:
+                ajustes = []
+                if f['salida_manana'] is None:
+                    ajustes.append(f'salida mañana {r["salida"]}')
+                if f['entrada_tarde'] is None:
+                    ajustes.append(f'entrada tarde {r["entrada"]}')
                 f['salida_manana'], f['entrada_tarde'] = salida, entrada
                 obs = [o for o in obs if o not in (
                     'jornada continua (sin marcas de almuerzo)', 'falta salida mañana', 'falta entrada tarde')]
-                obs.append(f'Horario configurado: salida mañana {r["salida"]}, entrada tarde {r["entrada"]}')
+                obs.append('Horario configurado: ' + ', '.join(ajustes))
             else:
                 obs.append('Revisar: almuerzo configurado fuera de las marcaciones del día')
         f['observaciones'] = '; '.join(obs)
