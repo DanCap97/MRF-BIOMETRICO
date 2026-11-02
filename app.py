@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import json
+
+from reglas import DIAS, sugerir_reglas, cargar_reglas, aplicar_reglas
 
 import pandas as pd
 import streamlit as st
@@ -97,7 +100,7 @@ with st.sidebar:
     )
     incluir_vacios = st.toggle(
         "Incluir días sin marcaciones",
-        value=False,
+        value=True,
         help="Agrega fines de semana, feriados y faltas como filas vacías.",
     )
     solo_basicas = st.toggle(
@@ -169,6 +172,47 @@ if not filas:
 nombres = {f["codigo"]: f["nombre"] for f in filas}
 orden_codigos = sorted(nombres, key=lambda c: (0, int(c)) if c.isdigit() else (1, 0))
 etiquetas = {c: f"{c} · {nombres[c]}" if nombres[c] else c for c in orden_codigos}
+# Las reglas se guardan en sesión y se pueden descargar para reutilizarlas.
+with st.expander("Configurar festivos y horarios por colaborador", expanded=True):
+    st.caption("Las reglas se aplican por código. Los sábados y domingos vienen seleccionados; puedes cambiar cualquier día por persona. Se conservan las marcaciones en festivos.")
+    sugeridas, pendientes = sugerir_reglas(nombres)
+    if "reglas_personales" not in st.session_state:
+        st.session_state.reglas_personales = {}
+    for codigo, regla in sugeridas.items():
+        st.session_state.reglas_personales.setdefault(codigo, regla)
+    if pendientes:
+        st.info("Sin coincidencia única para: " + ", ".join(pendientes) + ". Selecciona su código y configura la regla manualmente.")
+    config_subida = st.file_uploader("Cargar configuración guardada", type=["json"])
+    if st.button("Aplicar configuración cargada", disabled=config_subida is None):
+        try:
+            cargadas = cargar_reglas(config_subida.getvalue().decode("utf-8-sig"))
+            st.session_state.reglas_personales.update(cargadas)
+            st.success("Configuración cargada.")
+        except (ValueError, UnicodeError) as error:
+            st.error(f"Configuración inválida: {error}")
+    codigo_regla = st.selectbox("Colaborador a configurar", orden_codigos, format_func=lambda c: etiquetas[c])
+    regla = st.session_state.reglas_personales[codigo_regla]
+    # La clave cambia cuando cambia la regla, también después de importar un archivo.
+    revision = json.dumps(regla, sort_keys=True)
+    with st.form("regla_" + codigo_regla + revision):
+        dias = st.multiselect("Días que deben decir Festivo", list(range(7)), default=regla["festivos"], format_func=lambda d: DIAS[d])
+        almuerzo = st.checkbox("Fijar salida de mañana y entrada de tarde", value=regla["almuerzo"])
+        st.caption("Se aplica solo si existen entrada de mañana y salida de tarde compatibles. Las horas fijadas se identifican en Observaciones y se usan para calcular el total.")
+        a, b = st.columns(2)
+        salida = a.time_input("Salida de mañana", dt.time.fromisoformat(regla["salida"]))
+        entrada = b.time_input("Entrada de tarde", dt.time.fromisoformat(regla["entrada"]))
+        if st.form_submit_button("Guardar regla del colaborador"):
+            if salida >= entrada:
+                st.error("La salida de mañana debe ser anterior a la entrada de tarde.")
+            else:
+                st.session_state.reglas_personales[codigo_regla] = {
+                    "festivos": dias, "almuerzo": almuerzo,
+                    "salida": salida.strftime("%H:%M"), "entrada": entrada.strftime("%H:%M")}
+                st.rerun()
+    st.download_button("Guardar configuración para próximos reportes", json.dumps(st.session_state.reglas_personales, ensure_ascii=False, indent=2), "reglas_colaboradores.json", "application/json")
+    st.caption("Descarga la configuración antes de cerrar la sesión y cárgala al volver. Activa «Incluir días sin marcaciones» para ver los días vacíos presentes en el reporte.")
+filas = aplicar_reglas(filas, st.session_state.reglas_personales)
+
 fechas = [f["fecha"] for f in filas]
 
 col1, col2, col3 = st.columns([3, 2, 2])
@@ -207,7 +251,7 @@ minutos = [m for m in (minutos_trabajados(f) for f in seleccion) if m]
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Filas", f"{len(seleccion):,}".replace(",", "."))
 m2.metric("Colaboradores", len({f["codigo"] for f in seleccion}))
-m3.metric("Horas registradas", _hhmm(sum(minutos)) if minutos else "0:00")
+m3.metric("Horas calculadas", _hhmm(sum(minutos)) if minutos else "0:00")
 m4.metric("Con observaciones", len(incidencias))
 
 if not seleccion:
@@ -292,6 +336,6 @@ with tab_resumen:
     tabla.sort(key=lambda r: (0, int(r["Código"])) if r["Código"].isdigit() else (1, 0))
     st.dataframe(pd.DataFrame(tabla), hide_index=True, width="stretch")
     st.caption(
-        "Las horas son permanencia según el biométrico. En jornada continua se cuenta el lapso "
+        "Las horas usan las marcaciones y los horarios configurados. En jornada continua se cuenta el lapso "
         "completo, sin descontar almuerzo, y los días con una sola marca no suman."
     )
