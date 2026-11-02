@@ -4,7 +4,7 @@ import io
 
 import pandas as pd
 import streamlit as st
-from reglas import aplicar_reglas
+from reglas import REGLAS, aplicar_reglas
 from biometrico_normalizar import (Config, procesar, SLOTS, ENCABEZADOS, COLUMNAS_COMPLETAS,
                                    excel_en_bytes, csv_en_texto, minutos_trabajados)
 
@@ -63,7 +63,7 @@ except Exception:
 if not crudas:
     st.warning('No se encontraron días en el archivo.'); st.stop()
 actuales={f['codigo']:f['nombre'] for f in crudas}
-filas=aplicar_reglas(crudas)
+filas=aplicar_reglas(crudas, REGLAS)
 st.subheader('2. Revisa la asistencia')
 a,b,c=st.columns([2,2,1])
 elegidos=a.multiselect('Colaboradores',list(actuales),format_func=lambda c:actuales[c],placeholder='Todo el equipo')
