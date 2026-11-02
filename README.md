@@ -1,86 +1,70 @@
-# Marcaciones del biométrico
+# MRF · Asistencia
 
-Convierte los reportes mensuales del biométrico ("Tabla de Tarjetas de Asistencia")
-en una tabla por colaborador y día: código, fecha y los cuatro horarios
-(entrada mañana, salida mañana, entrada tarde, salida tarde).
+Carga el reporte del biométrico, revisa la tabla y descarga Excel o CSV.
+Las reglas están fijas en `reglas.py`. No hay configuración manual, JSON,
+contraseñas, bases de datos ni conexiones para guardar horarios.
+Siempre se aplican las mismas reglas al abrir la aplicación o cargar otro mes.
 
-## Correr la app
+## Reglas incluidas
+
+| Colaborador | Código biométrico | Regla |
+|---|---|---|
+| Todos | Todos | Sábados y domingos: Festivo |
+| Guido | 13 | También lunes, miércoles y viernes: Festivo |
+| Ruby | 27 | También lunes, miércoles y viernes: Festivo |
+| David | 21 | También viernes: Festivo |
+| Víctor Hugo Vélez | 6 | Salida de mañana 12:00; entrada de tarde 14:00 |
+
+El horario fijo solo se aplica si existen entrada de mañana y salida de tarde
+compatibles con ese descanso. Se identifica en Observaciones y se usa en el
+cálculo de horas. No crea asistencia en días vacíos o incompletos. No se aplica
+al otro Víctor (código 3).
+Los festivos conservan cualquier marcación existente. Se incluyen los días vacíos
+presentes en el reporte de origen, sin inventar fechas. Los códigos deben seguir
+correspondiendo a las mismas personas; si cambian, hay que actualizar `reglas.py`.
+Los colaboradores nuevos reciben automáticamente la regla de fines de semana.
+
+## Actualizar GitHub
+
+En la carpeta que contiene `app.py`, reemplaza:
+- `app.py`
+- `reglas.py`
+- `README.md`
+- `tests/test_reglas.py` (si habías subido las pruebas)
+
+El resto del motor y `requirements.txt` se mantienen. También puedes subir el
+contenido completo de esta carpeta. No subas el ZIP como sustituto del código.
+
+Si instalaste la versión anterior, elimina estos archivos que ya no se usan:
+- `almacen.py`
+- `configuracion_inicial.json`
+- `tests/test_almacen.py`
+- `.streamlit/secrets.example.toml`
+
+La app ya no lee Secrets ni la base local, aunque sigan presentes. Si habías
+creado credenciales exclusivamente para el guardado anterior, puedes retirarlas
+de Secrets y revocar ese token. No necesitas el repositorio de configuración.
+Los cambios posteriores de horarios se harán directamente en el código.
+
+## Uso local
 
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
-Se abre en http://localhost:8501. Cargá uno o más .xlsx y descargá el resultado
-en Excel o CSV.
-
-## Usarlo sin interfaz
-
-El mismo motor funciona por línea de comandos:
+## Verificación
 
 ```bash
-python biometrico_normalizar.py BIOMETRICO_JULIO.xlsx Biometrico_Agosto.xlsx -o marcaciones.xlsx --csv
+python -m unittest discover -s tests -v
 ```
 
-O importado desde otro script:
+Probado con las 527 filas y 17 colaboradores de HORARIO.xlsx. El reporte privado
+no se incluye en el proyecto.
 
-```python
-from biometrico_normalizar import procesar, Config
-filas = procesar(["julio.xlsx", "agosto.xlsx"], Config(corte_mediodia=datetime.time(13, 0)))
-```
+La pantalla «Días por revisar» excluye observaciones informativas de Festivo y
+Horario configurado. La hoja Incidencias del Excel conserva todas las filas con
+observaciones. Los filtros solo cambian lo que se muestra y descarga.
 
-## Publicarla
-
-Para que la usen otros sin instalar nada, subí esta carpeta a un repositorio y
-conectala a Streamlit Community Cloud (gratis) apuntando a `app.py`. `requirements.txt`
-ya tiene lo necesario.
-
-## Archivos
-
-| Archivo | Para qué sirve |
-|---|---|
-| `app.py` | Interfaz de Streamlit |
-| `biometrico_normalizar.py` | Lectura y clasificación de marcas, y CLI |
-| `requirements.txt` | Dependencias |
-| `.streamlit/config.toml` | Colores y límite de subida (50 MB) |
-
-## Festivos y horarios por colaborador
-
-En la app, abre **Configurar festivos y horarios por colaborador** después de
-cargar los reportes. Selecciona una persona por su código, marca sus días festivos
-y guarda su regla. Puedes activar o desactivar el horario fijo de almuerzo para
-cualquier colaborador y cambiar ambas horas.
-
-Reglas iniciales:
-- Todos: sábado y domingo → `Festivo` en Observaciones.
-- Guido y Ruby: también lunes, miércoles y viernes.
-- David: también viernes.
-- Víctor: salida de mañana 12:00 y entrada de tarde 14:00.
-
-Las reglas especiales se sugieren solo cuando hay una única persona cuyo nombre
-contiene la palabra completa correspondiente, sin distinguir tildes ni mayúsculas.
-Si falta el nombre o hay homónimos, se muestra un aviso para configurarlo por código.
-Revisa la selección inicial antes de exportar. Una regla guardada por código tiene
-prioridad sobre las sugerencias, incluso si se cambia el nombre en otro reporte.
-
-El horario fijo reemplaza esos dos campos únicamente en días con entrada de mañana
-y salida de tarde que abarquen el descanso; no crea asistencia en días vacíos ni
-completa días con una sola marcación. Queda identificado como horario configurado
-en Observaciones; N Marcas conserva el número de marcas leídas. Las horas totales
-se recalculan descontando ese descanso. Las marcaciones en festivos se conservan.
-Un día festivo sin marcas dice únicamente `Festivo`; las demás incidencias se mantienen.
-
-**Incluir días sin marcaciones** viene activado. Incluye las fechas vacías que ya
-existen en el reporte de origen, no inventa fechas ausentes del archivo. La opción
-**Sólo columnas A-F** oculta Observaciones, también al descargar.
-
-La configuración dura durante la sesión. Usa **Guardar configuración para próximos
-reportes** para descargarla y luego **Cargar configuración guardada** y **Aplicar
-configuración cargada** para reutilizarla. El archivo conserva reglas por código;
-úsalo con reportes del mismo registro de colaboradores.
-
-Estas reglas se aplican en la interfaz y en sus exportaciones Excel/CSV. Para usar
-las mismas reglas desde Python, aplica `reglas.aplicar_reglas(filas, reglas)` al
-resultado de `procesar`; la CLI original sigue siendo el normalizador básico.
-
-Verificación: `python -m unittest discover -s tests -v`.
+La CLI `biometrico_normalizar.py` mantiene la normalización básica original.
+Para aplicar las reglas fijas desde Python, llama a `reglas.aplicar_reglas(filas)`.
