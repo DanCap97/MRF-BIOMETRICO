@@ -7,25 +7,21 @@ import streamlit as st
 from reglas import REGLAS, aplicar_reglas
 from biometrico_normalizar import (Config, procesar, SLOTS, ENCABEZADOS, COLUMNAS_COMPLETAS,
                                    excel_en_bytes, csv_en_texto, minutos_trabajados)
-
 # Compatibilidad con reportes cacheados y motores anteriores sin el campo Día.
 DIAS_SEMANA = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
 ENCABEZADOS['dia'] = 'Día'
 COLUMNAS_COMPLETAS = [c for c in COLUMNAS_COMPLETAS if c != 'dia']
 COLUMNAS_COMPLETAS.insert(COLUMNAS_COMPLETAS.index('fecha') + 1, 'dia')
-
 st.set_page_config(page_title='MRF · Asistencia', page_icon='🕘', layout='wide')
 st.markdown('''<style>
 .block-container {max-width:1250px;padding-top:2rem}
 [data-testid="stMetric"] {background:#f1f5f9;border-radius:12px;padding:16px}
 [data-testid="stSidebar"] {background:#f1f5f9}
 </style>''', unsafe_allow_html=True)
-
 @st.cache_data(show_spinner='Organizando las marcaciones…')
 def leer_reportes(archivos):
     cfg=Config(incluir_dias_sin_marcas=True)
     return procesar([(n,io.BytesIO(b)) for n,b in archivos], cfg)
-
 
 def tabla(filas):
     columnas=['codigo','nombre','fecha','dia',*SLOTS,'observaciones']
@@ -40,15 +36,13 @@ def tabla(filas):
         salida.append(row)
     return pd.DataFrame(salida)
 
-
 def horas(minutos):
     return f'{minutos//60}:{minutos%60:02d}'
 
 
 def requiere_revision(f):
-    return any(o and o != 'Festivo' and not o.startswith('Horario configurado:')
+    return any(o and o != 'Libre' and not o.startswith('Horario configurado:')
                for o in f['observaciones'].split('; '))
-
 
 st.title('Asistencia del equipo')
 st.write('Carga el reporte del biométrico, revisa el resultado y descarga tu planilla.')
@@ -57,7 +51,7 @@ with st.container(border=True):
     subidos=st.file_uploader('Archivos del biométrico',type=['xlsx'],accept_multiple_files=True)
     st.caption('Formato del modelo HORARIO.xlsx · Puedes cargar varios meses.')
 with st.expander('Reglas aplicadas automáticamente'):
-    st.markdown('• Todos: sábado y domingo sin marcaciones → Festivo. Si hay marcaciones, se respetan.\n\n• Guido y Ruby: también lunes, miércoles y viernes sin marcaciones.\n\n• David: también viernes sin marcaciones.\n\n• Víctor Hugo Vélez (código 6): de lunes a viernes, completar salida de mañana 12:00 y entrada de tarde 14:00 solo si faltan y las marcaciones abarcan ambos turnos. Sábados y domingos se respetan las horas registradas.')
+    st.markdown('• Todos: sábado y domingo sin marcaciones → Libre. Si hay marcaciones, se respetan (incluidos los sábados que trabaja Evelyn).\n\n• Guido y Ruby: también lunes, miércoles y viernes sin marcaciones → Libre.\n\n• David: también viernes sin marcaciones → Libre.\n\n• Víctor Hugo Vélez (código 6): de lunes a viernes, completar salida de mañana 12:00 y entrada de tarde 14:00 solo si faltan y las marcaciones abarcan ambos turnos. Sábados y domingos se respetan las horas registradas; no se completa un almuerzo ficticio.')
 if not subidos:
     st.info('Carga un reporte para comenzar. Las reglas se aplican automáticamente.')
     st.stop()
@@ -84,7 +78,7 @@ if len(rango)==2: seleccion=[f for f in seleccion if rango[0]<=f['fecha']<=rango
 if solo_revision: seleccion=[f for f in seleccion if requiere_revision(f)]
 metricas=st.columns(4)
 metricas[0].metric('Colaboradores',len({f['codigo'] for f in seleccion}))
-metricas[1].metric('Días festivos',sum('Festivo' in f['observaciones'].split('; ') for f in seleccion))
+metricas[1].metric('Días libres',sum('Libre' in f['observaciones'].split('; ') for f in seleccion))
 metricas[2].metric('Días por revisar',sum(requiere_revision(f) for f in seleccion))
 metricas[3].metric('Horas calculadas',horas(sum(minutos_trabajados(f) or 0 for f in seleccion)))
 if not seleccion:
@@ -99,7 +93,7 @@ with t2:
                         'Horas calculadas':horas(sum(minutos_trabajados(f) or 0 for f in ff)),
                         'Por revisar':sum(requiere_revision(f) for f in ff)})
     st.dataframe(pd.DataFrame(resumen),hide_index=True,width='stretch')
-st.caption('Las horas incluyen ajustes configurados. Los días incompletos requieren revisión; los días festivos pueden conservar horas trabajadas.')
+st.caption('Las horas incluyen ajustes configurados. Los días incompletos requieren revisión; un día habitual de descanso puede registrar horas trabajadas si existen marcaciones.')
 st.subheader('3. Descarga tu planilla')
 a,b=st.columns(2)
 a.download_button('Descargar Excel',excel_en_bytes(seleccion,COLUMNAS_COMPLETAS),'asistencia_mrf.xlsx',

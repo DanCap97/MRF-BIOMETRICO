@@ -6,11 +6,14 @@ DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Doming
 
 
 def regla_vacia():
+    # "festivos" es el nombre interno histórico de la clave; representa días libres.
+    # Se conserva para no romper configuraciones que usen esta estructura.
     return {'festivos': [5, 6], 'almuerzo': False, 'salida': '12:00', 'entrada': '14:00'}
 
 
 # Reglas fijas, asociadas al código biométrico del modelo HORARIO.xlsx.
 # 0=Lunes, ..., 6=Domingo. Los demás colaboradores usan regla_vacia().
+# Un día libre solo se etiqueta como "Libre" si NO hubo marcaciones.
 REGLAS = {
     '6': {'festivos': [5, 6], 'almuerzo': True, 'salida': '12:00', 'entrada': '14:00'},  # Víctor Hugo Vélez
     '13': {'festivos': [0, 2, 4, 5, 6], 'almuerzo': False, 'salida': '12:00', 'entrada': '14:00'},  # Guido
@@ -27,7 +30,7 @@ def validar_reglas(reglas):
             raise ValueError('Código o regla inválidos.')
         dias = r.get('festivos')
         if not isinstance(dias, list) or any(type(d) is not int or d not in range(7) for d in dias):
-            raise ValueError(f'{codigo}: días festivos inválidos.')
+            raise ValueError(f'{codigo}: días libres inválidos.')
         if type(r.get('almuerzo')) is not bool:
             raise ValueError(f'{codigo}: opción de almuerzo inválida.')
         horas = []
@@ -49,10 +52,22 @@ def aplicar_reglas(filas, reglas=None):
         f = original.copy()
         r = reglas.get(f['codigo'], regla_vacia())
         obs = [o for o in f['observaciones'].split('; ') if o]
-        hay_marcas = bool(f.get('marcas')) or any(f.get(c) is not None for c in
-            ('entrada_manana', 'salida_manana', 'entrada_tarde', 'salida_tarde'))
+        hay_marcas = bool(f.get('marcas')) or any(
+            f.get(c) is not None for c in
+            ('entrada_manana', 'salida_manana', 'entrada_tarde', 'salida_tarde')
+        )
+        # Los sábados, domingos y descansos específicos son "Libre" únicamente
+        # cuando el reporte no contiene marcaciones. Esto permite que Evelyn
+        # trabaje algunos sábados y respeta los registros de Don Víctor.
         if f['fecha'].weekday() in r['festivos'] and not hay_marcas:
-            obs = ['Festivo'] + [o for o in obs if o not in ('sin marcaciones', 'Festivo')]
+            obs = ['Libre'] + [o for o in obs if o not in ('sin marcaciones', 'Festivo', 'Libre')]
+        else:
+            # Si se reprocesa una fila ya etiquetada, no conservar un "Libre"
+            # histórico si existe asistencia real.
+            obs = [o for o in obs if o not in ('Festivo', 'Libre')]
+
+        # Don Víctor (6): aplicar ajuste 12:00-14:00 SOLO de lunes a viernes,
+        # y únicamente si existen marcaciones compatibles con ambos turnos.
         if (r['almuerzo'] and f['fecha'].weekday() < 5
                 and f['entrada_manana'] and f['salida_tarde']
                 and (f['salida_manana'] is None or f['entrada_tarde'] is None)):
